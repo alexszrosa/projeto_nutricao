@@ -1,0 +1,1 @@
+Uma pagina para cadastrar os pacientes e atraves desse cadastro teremos controle que terá acesso ao uso do Agente Nutricionista cadastro e pesquisa de calorias e proteínas diariamente.
