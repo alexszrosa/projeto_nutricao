@@ -1,74 +1,62 @@
 import streamlit as st
-import psycopg2
-from config import DB_CONFIG
+import os
+from supabase import create_client, Client
+from dotenv import load_dotenv
 
-# ======================
-# 🔌 Função de conexão
-# ======================
-def conectar():
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        return conn
-    except Exception as e:
-        st.error(f"Erro ao conectar ao banco de dados: {e}")
-        return None
+# ===========================
+# 🔧 Carregar variáveis do .env
+# ===========================
+load_dotenv()
 
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_KEY")
 
-# ==================================
-# 🔹 Inserir paciente no banco
-# ==================================
+# Criar o cliente Supabase
+supabase: Client = create_client(url, key)
+
+# ===========================
+# 🔹 Funções de Banco de Dados
+# ===========================
 def inserir_paciente(nome, data_nascimento, sexo, telefone, email):
-    conn = conectar()
-    if conn:
-        try:
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO pacientes (nome, data_nascimento, sexo, telefone, email)
-                VALUES (%s, %s, %s, %s, %s);
-            """, (nome, data_nascimento, sexo, telefone, email))
-            conn.commit()
-            cur.close()
-            conn.close()
+    try:
+        data = {
+            "nome": nome,
+            "data_nascimento": str(data_nascimento),
+            "sexo": sexo,
+            "telefone": telefone,
+            "email": email
+        }
+        response = supabase.table("pacientes").insert(data).execute()
+        if response.data:
             st.success("✅ Paciente cadastrado com sucesso!")
-        except Exception as e:
-            st.error(f"Erro ao inserir paciente: {e}")
-            conn.close()
-
-
-# ==================================
-# 🔍 Listar pacientes com filtro
-# ==================================
-def listar_pacientes(filtro=None):
-    conn = conectar()
-    if conn:
-        cur = conn.cursor()
-        if filtro:
-            consulta = """
-                SELECT id, nome, telefone, email
-                FROM pacientes
-                WHERE nome ILIKE %s OR telefone ILIKE %s
-                ORDER BY id DESC;
-            """
-            cur.execute(consulta, (f"%{filtro}%", f"%{filtro}%"))
         else:
-            cur.execute("SELECT id, nome, telefone, email FROM pacientes ORDER BY id DESC;")
-
-        dados = cur.fetchall()
-        cur.close()
-        conn.close()
-        return dados
+            st.error(f"Erro ao inserir paciente: {response}")
+    except Exception as e:
+        st.error(f"Erro ao inserir paciente: {e}")
 
 
-# ======================
+def listar_pacientes(filtro=None):
+    try:
+        query = supabase.table("pacientes").select("id, nome, telefone, email")
+        if filtro:
+            query = query.ilike("nome", f"%{filtro}%").or_(
+                f"telefone.ilike.%{filtro}%"
+            )
+        response = query.order("id", desc=True).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Erro ao buscar pacientes: {e}")
+        return []
+
+
+# ===========================
 # 🎨 Interface Streamlit
-# ======================
+# ===========================
 st.set_page_config(page_title="Cadastro de Pacientes", page_icon="📋", layout="centered")
 
 st.title("📋 Cadastro de Pacientes - Projeto Nutricionista")
 
-# ----------------------
 # Formulário de cadastro
-# ----------------------
 st.subheader("Preencha os dados do paciente:")
 
 with st.form("form_paciente"):
@@ -86,15 +74,11 @@ with st.form("form_paciente"):
             st.warning("⚠️ Preencha pelo menos o nome e o email!")
 
 
-# ----------------------
 # Filtro de busca
-# ----------------------
 st.subheader("🔎 Buscar pacientes")
 filtro = st.text_input("Digite o nome ou telefone para buscar:")
 
-# ----------------------
-# Listagem dos pacientes
-# ----------------------
+# Lista de pacientes
 st.subheader("📋 Lista de Pacientes:")
 
 pacientes = listar_pacientes(filtro)
